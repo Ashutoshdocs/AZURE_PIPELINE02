@@ -1,0 +1,98 @@
+trigger:
+- main
+
+pool:
+  name: bluelabelhost
+
+stages:
+
+#########################
+# BUILD STAGE
+#########################
+
+- stage: Build
+  displayName: Build Docker Image
+
+  jobs:
+
+  - job: BuildDocker
+
+    steps:
+
+    - checkout: self
+
+    - script: |
+        echo "Current Directory"
+        pwd
+        ls -l
+      displayName: Verify Files
+
+    - script: |
+        docker build -t website:v1 .
+      displayName: Build Docker Image
+
+    - script: |
+        docker images
+      displayName: Verify Docker Image
+
+    - script: |
+        docker save website:v1 -o website.tar
+      displayName: Save Docker Image
+
+    - task: CopyFiles@2
+      inputs:
+        SourceFolder: '$(Build.SourcesDirectory)'
+        Contents: 'website.tar'
+        TargetFolder: '$(Build.ArtifactStagingDirectory)'
+      displayName: Copy TAR
+
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)'
+        artifact: website
+      displayName: Publish Artifact
+
+#########################
+# DEPLOY STAGE
+#########################
+
+- stage: Deploy
+  displayName: Deploy Docker
+
+  dependsOn: Build
+
+  jobs:
+
+  - deployment: DeployWebsite
+
+    environment: Production
+
+    strategy:
+      runOnce:
+        deploy:
+
+          steps:
+
+          - download: current
+            artifact: website
+
+          - script: |
+
+              echo "Downloaded Artifacts"
+
+              find $(Pipeline.Workspace)
+
+              docker stop website || true
+
+              docker rm website || true
+
+              docker load -i $(find $(Pipeline.Workspace) -name website.tar)
+
+              docker run -d \
+                --name website \
+                -p 8080:80 \
+                website:v1
+
+              docker ps
+
+            displayName: Deploy Container
