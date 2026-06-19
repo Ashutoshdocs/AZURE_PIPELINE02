@@ -6,16 +6,17 @@ pool:
 
 stages:
 
-#########################
+############################
 # BUILD STAGE
-#########################
+############################
 
 - stage: Build
   displayName: Build Docker Image
 
   jobs:
 
-  - job: BuildDocker
+  - job: BuildJob
+    displayName: Build
 
     steps:
 
@@ -24,24 +25,35 @@ stages:
     - script: |
         echo "Current Directory"
         pwd
-        ls -l
-      displayName: Verify Files
+
+        echo "Build Sources"
+        echo $(Build.SourcesDirectory)
+
+        echo "Repository Contents"
+        ls -R $(Build.SourcesDirectory)
+      displayName: Verify Repository
 
     - script: |
+        cd $(Build.SourcesDirectory)/ProjectTwo
+
         docker build -t website:v1 .
       displayName: Build Docker Image
 
     - script: |
         docker images
-      displayName: Verify Docker Image
+      displayName: Verify Image
 
     - script: |
+        cd $(Build.SourcesDirectory)/ProjectTwo
+
         docker save website:v1 -o website.tar
+
+        ls -lh
       displayName: Save Docker Image
 
     - task: CopyFiles@2
       inputs:
-        SourceFolder: '$(Build.SourcesDirectory)'
+        SourceFolder: '$(Build.SourcesDirectory)/ProjectTwo'
         Contents: 'website.tar'
         TargetFolder: '$(Build.ArtifactStagingDirectory)'
       displayName: Copy TAR
@@ -52,12 +64,13 @@ stages:
         artifact: website
       displayName: Publish Artifact
 
-#########################
+############################
 # DEPLOY STAGE
-#########################
+############################
 
 - stage: Deploy
-  displayName: Deploy Docker
+
+  displayName: Deploy Container
 
   dependsOn: Build
 
@@ -68,7 +81,9 @@ stages:
     environment: Production
 
     strategy:
+
       runOnce:
+
         deploy:
 
           steps:
@@ -78,7 +93,7 @@ stages:
 
           - script: |
 
-              echo "Downloaded Artifacts"
+              echo "Downloaded Files"
 
               find $(Pipeline.Workspace)
 
@@ -91,8 +106,9 @@ stages:
               docker run -d \
                 --name website \
                 -p 8080:80 \
+                --restart always \
                 website:v1
 
               docker ps
 
-            displayName: Deploy Container
+            displayName: Deploy Docker
